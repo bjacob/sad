@@ -1,0 +1,189 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<script src="sad.js"></script>
+<script type="x-shader/x-vertex" id="vertexShader">
+  attribute vec2 vertexPosition;
+  varying vec2 texCoord;
+  uniform vec2 topleft;
+  uniform vec2 bottomright;
+  void main(void) {
+    texCoord = vertexPosition;
+    gl_Position = vec4(topleft + vertexPosition * (bottomright - topleft), 0.0, 1.0);
+  }
+</script>
+<script type="x-shader/x-fragment" id="plainFragmentShader">
+  precision mediump float;
+  uniform sampler2D texSampler;
+  varying vec2 texCoord;
+  void main(void) {
+    gl_FragColor = vec4(texture2D(texSampler, texCoord).rgb, 0.5);
+  }
+</script>
+
+<script type="x-shader/x-fragment" id="swizzleFragmentShader">
+  precision mediump float;
+  uniform sampler2D texSampler;
+  varying vec2 texCoord;
+  void main(void) {
+    gl_FragColor = vec4(texture2D(texSampler, texCoord).bgr, 0.5);
+  }
+</script>
+
+<script type="x-shader/x-fragment" id="noalphaFragmentShader">
+  precision mediump float;
+  uniform sampler2D texSampler;
+  varying vec2 texCoord;
+  void main(void) {
+    gl_FragColor = vec4(texture2D(texSampler, texCoord).rgb, 1.0);
+  }
+</script>
+
+<script type="x-shader/x-fragment" id="swizzlenoalphaFragmentShader">
+  precision mediump float;
+  uniform sampler2D texSampler;
+  varying vec2 texCoord;
+  void main(void) {
+    gl_FragColor = vec4(texture2D(texSampler, texCoord).bgr, 1.0);
+  }
+</script>
+
+<script type="x-shader/x-fragment" id="unifiedFragmentShader">
+  precision mediump float;
+  uniform sampler2D texSampler;
+  varying vec2 texCoord;
+  uniform bool swizzle;
+  uniform bool noalpha;
+  void main(void) {
+    vec4 c = vec4(texture2D(texSampler, texCoord).rgb, 0.5);
+    if (swizzle) {
+       c = c.bgra;
+    }
+    if (noalpha) {
+       c.a = 1.0;
+    }
+    gl_FragColor = c;
+  }
+</script>
+
+<script>
+
+  function start() {
+    var img = document.getElementById("img");
+
+    var test = new Test();
+    var gl = test.gl;
+
+    var texUnit = 0;
+
+    var vertexShader = new Shader(gl, "vertexShader");
+    var plainFragmentShader = new Shader(gl, "plainFragmentShader");
+    var swizzleFragmentShader = new Shader(gl, "swizzleFragmentShader");
+    var noalphaFragmentShader = new Shader(gl, "noalphaFragmentShader");
+    var swizzlenoalphaFragmentShader = new Shader(gl, "swizzlenoalphaFragmentShader");
+    var unifiedFragmentShader = new Shader(gl, "unifiedFragmentShader");
+
+    var plainProgram = new Program(gl, vertexShader, plainFragmentShader, ["vertexPosition"], ["texSampler", "swizzle", "noalpha", "topleft", "bottomright"]);
+    var swizzleProgram = new Program(gl, vertexShader, swizzleFragmentShader, ["vertexPosition"], ["texSampler", "swizzle", "noalpha", "topleft", "bottomright"]);
+    var noalphaProgram = new Program(gl, vertexShader, noalphaFragmentShader, ["vertexPosition"], ["texSampler", "swizzle", "noalpha", "topleft", "bottomright"]);
+    var swizzlenoalphaProgram = new Program(gl, vertexShader, swizzlenoalphaFragmentShader, ["vertexPosition"], ["texSampler", "swizzle", "noalpha", "topleft", "bottomright"]);
+    var unifiedProgram = new Program(gl, vertexShader, unifiedFragmentShader, ["vertexPosition"], ["texSampler", "swizzle", "noalpha", "topleft", "bottomright"]);
+
+    var vertexPositionBuffer =
+      new ArrayBuffer(gl, [0.0,  0.0,
+                             0.0,  1.0,
+                             1.0,  0.0,
+                             1.0,  1.0]);
+    vertexPositionBuffer.bind();
+
+    var mountainTexture = new Texture(gl, img);
+    mountainTexture.bindOnTextureUnit(texUnit);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    var x, y;
+
+    function RandomCoord() { return PseudoRandom() * 2 - 1; }
+
+    function drawUnified(numIters) {
+      unifiedProgram.use();
+      var swizzle, noalpha;
+      for (var iter = 0; iter < numIters; iter++) {
+        for (var i = 0; i < 4; i++) {
+          gl.enableVertexAttribArray(unifiedProgram.vertexPosition);
+          gl.uniform1i(unifiedProgram.texSampler, texUnit);
+          swizzle = i == 1 || i == 3;
+          noalpha = i == 2 || i == 3;
+          gl.uniform1i(unifiedProgram.swizzle, swizzle);
+          gl.uniform1i(unifiedProgram.noalpha, noalpha);
+          x = RandomCoord(); y = RandomCoord();
+          gl.uniform2fv(unifiedProgram.topleft, [x, y]);
+          gl.uniform2fv(unifiedProgram.bottomright, [x + 1, y + 1]);
+          gl.vertexAttribPointer(unifiedProgram.vertexPosition, 2, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          gl.disableVertexAttribArray(unifiedProgram.vertexPosition);
+        }
+      }
+    }
+
+    function drawNonUnified(numIters) {
+      for (var iter = 0; iter < numIters; iter++) {
+        plainProgram.use();
+        gl.enableVertexAttribArray(plainProgram.vertexPosition);
+        gl.uniform1i(plainProgram.texSampler, texUnit);
+        x = RandomCoord(); y = RandomCoord();
+        gl.uniform2fv(plainProgram.topleft, [x, y]);
+        gl.uniform2fv(plainProgram.bottomright, [x + 1, y + 1]);
+        gl.vertexAttribPointer(plainProgram.vertexPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(plainProgram.vertexPosition);
+
+        swizzleProgram.use();
+        gl.enableVertexAttribArray(swizzleProgram.vertexPosition);
+        gl.uniform1i(swizzleProgram.texSampler, texUnit);
+        x = RandomCoord(); y = RandomCoord();
+        gl.uniform2fv(swizzleProgram.topleft, [x, y]);
+        gl.uniform2fv(swizzleProgram.bottomright, [x + 1, y + 1]);
+        gl.vertexAttribPointer(swizzleProgram.vertexPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(swizzleProgram.vertexPosition);
+
+        noalphaProgram.use();
+        gl.enableVertexAttribArray(noalphaProgram.vertexPosition);
+        gl.uniform1i(noalphaProgram.texSampler, texUnit);
+        x = RandomCoord(); y = RandomCoord();
+        gl.uniform2fv(noalphaProgram.topleft, [x, y]);
+        gl.uniform2fv(noalphaProgram.bottomright, [x + 1, y + 1]);
+        gl.vertexAttribPointer(noalphaProgram.vertexPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(noalphaProgram.vertexPosition);
+
+        swizzlenoalphaProgram.use();
+        gl.enableVertexAttribArray(swizzlenoalphaProgram.vertexPosition);
+        gl.uniform1i(swizzlenoalphaProgram.texSampler, texUnit);
+        x = RandomCoord(); y = RandomCoord();
+        gl.uniform2fv(swizzlenoalphaProgram.topleft, [x, y]);
+        gl.uniform2fv(swizzlenoalphaProgram.bottomright, [x + 1, y + 1]);
+        gl.vertexAttribPointer(swizzlenoalphaProgram.vertexPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disableVertexAttribArray(swizzlenoalphaProgram.vertexPosition);
+      }
+    }
+
+    test.addPath({
+                  drawFunc: drawUnified,
+                  description: "Unified shader"
+                });
+    test.addPath({
+                  drawFunc: drawNonUnified,
+                  description: "Non-unified shaders"
+                });
+
+    test.run();
+  }
+</script>
+</head>
+<body onload="start();" style="margin:0px" id="b">
+  <img src="Chief_Mountain_small.jpg" style="display:none" id="img"/>
+</body>
+</html>
